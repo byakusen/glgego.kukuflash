@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>九九フラッシュカード＋チェック表（切替式）</title>
+<!-- 追加: M PLUS Rounded 1c の読み込み -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;800&display=swap" rel="stylesheet">
+<!-- 追加: 紙吹雪用ライブラリ -->
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+<style>
+  /* ===== 共通（切替タブ・アプリ全体） ===== */
+  :root{
+    --bg: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+    --panel: rgba(255, 255, 255, 0.7);
+    --text: #334155;
+    --accent: #0ea5e9;
+    --shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    --radius: 20px;
+    --border: 1px solid rgba(255, 255, 255, 0.8);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; 
+    font-family: 'M PLUS Rounded 1c', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; 
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+  .topbar{display:flex; gap:10px; justify-content:center; padding:12px 12px 0; width: 100%; max-width: 1100px;}
+  .tab{
+    padding:12px 24px; border-radius:999px; border:var(--border); 
+    background:var(--panel); color:var(--text); cursor:pointer; 
+    font-weight:800; font-size:16px; transition:all 0.2s;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: var(--shadow);
+  }
+  .tab[data-active="true"]{
+    background: var(--accent); color: #fff; 
+    box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4);
+    border-color: var(--accent);
+  }
+  .tab:active { transform: scale(0.95); }
+
+  /* ====== フラッシュカードスタイル（グラスモーフィズム対応） ====== */
+  .app{width:min(1100px,100%); margin:0 auto; padding:20px; color:var(--text); flex-grow: 1; display:flex; flex-direction:column; justify-content:center;}
+  .fc-wrap{display:block}
+  .fc-header{
+    display:flex; flex-direction: column; gap:16px; align-items:center; 
+    margin-bottom:12px; background: var(--panel); backdrop-filter: blur(10px); 
+    -webkit-backdrop-filter: blur(10px); border: var(--border); 
+    padding: 16px; border-radius: var(--radius); box-shadow: var(--shadow);
+  }
+  @media (min-width: 768px) {
+    .fc-header { flex-direction: row; justify-content: space-between; }
+  }
+  .fc-header h1{font-size:24px; font-weight:800; margin:0; letter-spacing:.02em; color: var(--accent);}
+  
+  .controls{display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:center;}
+  .group{
+    background:rgba(255,255,255,0.5); border:var(--border); padding:10px 16px; 
+    border-radius:14px; display:flex; align-items:center; gap:10px; flex-wrap: wrap;
+    justify-content: center;
+  }
+  .seg{display:flex; gap:8px; flex-wrap:wrap; justify-content: center;}
+  .seg button{
+    padding:10px 14px; border-radius:12px; border:var(--border); 
+    background:rgba(255,255,255,0.8); color:var(--text); cursor:pointer; 
+    font-weight:700; transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  }
+  .seg button[data-active="true"]{
+    background: var(--accent); color: white; border-color: var(--accent);
+    box-shadow: 0 4px 10px rgba(14,165,233,0.3);
+  }
+  .seg button:active { transform: scale(0.95); }
+  
+  .btn{
+    padding:12px 20px; border-radius:999px; border:var(--border); 
+    background:var(--panel); color:var(--text); cursor:pointer; 
+    font-weight:800; transition:all 0.2s; box-shadow: var(--shadow);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .btn:active { transform: scale(0.95); }
+  .btn:disabled{opacity:.5; cursor:not-allowed; transform: none;}
+  
+  button.primary{
+    background: linear-gradient(135deg, #38bdf8, #0284c7); color:#fff; border:none;
+    box-shadow: 0 4px 15px rgba(2,132,199,0.4); font-size: 18px; padding: 14px 28px;
+  }
+
+  .board{display:grid; grid-template-columns:1fr 420px; gap:24px; align-items:stretch; margin-top:12px}
+  @media (max-width: 900px){ .board{grid-template-columns: 1fr} }
+
+  .card{
+    background:var(--panel); border:var(--border); border-radius:var(--radius); 
+    padding:24px; box-shadow:var(--shadow); position:relative; display:flex; 
+    align-items:center; justify-content:center; min-height:360px; perspective:1000px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  }
+  .inner{position:relative; width:100%; height:100%; transform-style:preserve-3d; transition: transform .6s cubic-bezier(.34,1.56,.64,1)}
+  .card[data-flipped="true"] .inner{transform: rotateY(180deg)}
+  .face{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; 
+    backface-visibility:hidden; border-radius:var(--radius);
+    background: rgba(255,255,255,0.9); border: 2px solid #e2e8f0;
+  }
+  .front,.back{padding:20px;}
+  .front h2,.back h2{font-size:clamp(32px, 10vw, 60px); text-align:center; margin:0; color: #1e293b;}
+  .back h2{color: #e11d48;} 
+  .sub{color:#64748b; font-size:16px; font-weight: 700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:10px; text-align:center;}
+  .back{transform:rotateY(180deg)}
+
+  /* 追加：ヒントスタイル */
+  #hintBtn { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border-radius: 50%; background: #fbbf24; border:none; color:white; font-size: 20px; cursor: pointer; display: none; box-shadow: 0 4px 10px rgba(251, 191, 36, 0.4); z-index: 10; }
+  #hintArea { position: absolute; inset: 0; background: rgba(255,255,255,0.95); z-index: 20; border-radius: var(--radius); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.3s; }
+  .hint-dots { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 80%; }
+  .hint-group { border: 2px dashed #fbbf24; padding: 6px; border-radius: 12px; display: flex; gap: 4px; }
+  .dot { width: 14px; height: 14px; background: #fbbf24; border-radius: 50%; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .panel{
+    background:var(--panel); border:var(--border); border-radius:var(--radius); 
+    padding:24px; box-shadow:var(--shadow); backdrop-filter: blur(10px); 
+    -webkit-backdrop-filter: blur(10px); display:flex; flex-direction:column; gap:12px;
+  }
+  .row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .progress{height:16px; background:rgba(255,255,255,0.5); border:var(--border); border-radius:999px; overflow:hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);}
+  .bar{height:100%; width:0%; background:linear-gradient(90deg, #34d399, #10b981); transition: width 0.3s ease;}
+  
+  .stat{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px}
+  .pill{
+    background:rgba(255,255,255,0.8); border:var(--border); padding:16px; 
+    border-radius:16px; text-align:center; box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  }
+  .pill span { color: #64748b; font-weight: 700; }
+  .pill strong{display:block; font-size:28px; color: #1e293b; margin-top:4px;}
+  #okC { color: #10b981; }
+  #ngC { color: #f43f5e; }
+
+  .note{color:#64748b; font-size:14px; font-weight: 700; line-height: 1.4; margin: 0;}
+  .kbd{border:1px solid #cbd5e1; background:#f1f5f9; padding:2px 8px; border-radius:6px; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #475569;}
+  .footer{margin-top:24px; color:#64748b; font-size:14px; text-align:center; font-weight: 700; padding-bottom: 20px;}
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  #revealBtn { grid-column: span 2; background: #fbbf24; color: #fff; border:none; font-size: 18px; padding: 16px;}
+  #okBtn { background: #10b981; color: white; border: none; font-size: 18px; padding: 16px;}
+  #ngBtn { background: #f43f5e; color: white; border: none; font-size: 18px; padding: 16px;}
+
+  /* ====== チェック表（スマホ最適化・グラスモーフィズム） ====== */
+  .checklist{
+    display:none; 
+    background:var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+    color:var(--text); padding:24px; margin: 20px auto; width: min(1100px, 95%);
+  }
+  .checklist h1{margin-top:0; margin-bottom:24px; color:var(--accent); text-align: center; font-size: 28px;}
+  .checklist h2{margin:24px 0 12px; border-left:8px solid var(--accent); padding-left:12px; color:#1e293b; font-size: 20px;}
+
+  .checklist .wrap{display:flex; gap:40px; align-items:flex-start}
+  .checklist .column{flex:1; min-width:420px}
+
+  .checklist table{border-collapse:separate; border-spacing: 0; margin:12px 0; width:100%; background: rgba(255,255,255,0.6); border-radius: 12px; overflow: hidden; border: var(--border);}
+  .checklist th,.checklist td{border-bottom:1px solid rgba(0,0,0,0.1); border-right:1px solid rgba(0,0,0,0.1); padding:12px 10px; text-align:center; vertical-align:middle}
+  .checklist th{background:rgba(255,255,255,0.8); font-weight: 800; color: #334155;}
+  .checklist .row-title{white-space:nowrap; text-align:left; font-weight: 700; color: #475569;}
+
+  /* タップ対象（チェック枠） - 小学生向けに大きく押しやすく */
+  .checklist .cell-box{
+    width:36px; height:36px;
+    border:3px solid #cbd5e1;
+    border-radius:10px;
+    display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none; background:#fff;
+    touch-action:manipulation; transition: all 0.2s;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+  }
+  .checklist .cell-box.checked{
+    background:#4ade80; border-color: #22c55e;
+    box-shadow:inset 0 0 0 4px rgba(255,255,255,.8), 0 2px 8px rgba(74,222,128,0.4);
+  }
+  .checklist .cell-box:active { transform: scale(0.9); }
+
+  /* 結果表示 */
+  .checklist .hanamaru{width:80px; height:80px; object-fit:contain; display:inline-block; opacity:0; transform:scale(.98); pointer-events:none}
+  .checklist .result{width:160px; min-height:160px; position:relative; overflow:visible; vertical-align:middle; background: rgba(255,255,255,0.3);}
+  .checklist .summary-row{height:70px}
+  .checklist .teacher-row{height:100px}
+  .checklist .teacher-check-row{height:80px}
+
+  .checklist .hanamaru-deluxe,
+  .checklist .gokaku,
+  .checklist .mini-award{
+    position:absolute; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    overflow:visible;
+    opacity:0; transform:scale(.98);
+    pointer-events:none;
+  }
+  .checklist .hanamaru-deluxe img{
+    max-width:140px; max-height:140px;
+    width:100%; height:auto;
+    filter:drop-shadow(0 4px 6px rgba(0,0,0,.15));
+  }
+  .checklist .gokaku img{
+    max-width:170px; max-height:140px;
+    width:100%; height:auto;
+    filter:drop-shadow(0 6px 10px rgba(0,0,0,.2));
+  }
+  .checklist .mini-award img{
+    max-width:520px;
+    width:100%; height:auto;
+    filter:drop-shadow(0 10px 18px rgba(0,0,0,.2));
+  }
+
+  .checklist .anim{transition:opacity .4s cubic-bezier(.34,1.56,.64,1), transform .4s cubic-bezier(.34,1.56,.64,1)}
+  .checklist .show{opacity:1 !important; transform:scale(1) !important}
+
+  /* 横に長い表（スマホは横スクロール＋先頭列固定） */
+  .checklist .wide-block{margin-top:32px; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius: 12px; border: var(--border); background: rgba(255,255,255,0.6);}
+  .checklist .wide-table{width:100%; min-width:740px;}
+  .checklist .wide-head th{background:rgba(255,255,255,0.9);}
+  .checklist .wide-col-title{width:140px}
+  .checklist .wide-col-small{width:176px}
+  .checklist .wide-table .result{width:auto; min-height:240px}
+
+  .checklist .wide-table th:first-child{
+    position:sticky; left:0; z-index:3; background:rgba(255,255,255,0.9);
+  }
+  .checklist .wide-table td:first-child{
+    position:sticky; left:0; z-index:2; background:rgba(255,255,255,0.9);
+  }
+
+  /* スマホ向け調整 */
+  @media (max-width:768px){
+    body { padding-bottom: 20px; }
+    .topbar { padding: 12px; }
+    .tab { padding: 10px 16px; font-size: 14px; }
+    
+    .fc-header { padding: 12px; }
+    .fc-header h1 { font-size: 20px; }
+    .group { padding: 8px 10px; }
+    .seg button { padding: 8px 12px; font-size: 14px; }
+    .btn { padding: 10px 16px; font-size: 14px; }
+    button.primary { padding: 12px 20px; font-size: 16px; }
+
+    .card { min-height: 280px; padding: 16px; }
+    .front h2, .back h2 { font-size: clamp(32px, 10vw, 60px); }
+    
+    .panel { padding: 16px; }
+    .pill strong { font-size: 24px; }
+    
+    .checklist{padding:16px; margin: 10px auto;}
+    .checklist h1{font-size:22px; margin-bottom:16px}
+    .checklist h2{font-size:18px; margin:20px 0 10px; padding-left:8px}
+    .checklist .wrap{flex-direction:column; gap:20px}
+    .checklist .column{min-width:auto; width: 100%;}
+
+    .checklist table{font-size:14px}
+    .checklist th,.checklist td{padding:8px}
+    .checklist .row-title{white-space:normal}
+
+    .checklist .cell-box{width:40px; height:40px} /* タップ領域をより大きく */
+    .checklist .result{min-height:120px; width: 100px;}
+    .checklist .wide-table .result{min-height:180px}
+    .checklist .hanamaru{width:64px; height:64px}
+
+    .checklist .wide-table{min-width:820px}
+    .checklist .wide-col-title{width:120px}
+    .checklist .wide-col-small{width:140px}
+  }
+
+  /* トーストデザイン改善 */
+  #fc-toast {
+    position: fixed; left: 50%; top: 20px; transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.9) !important;
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    padding: 12px 24px !important;
+    border-radius: 999px !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
+    z-index: 9999;
+    font-family: 'M PLUS Rounded 1c', sans-serif;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="tab" id="tabFlash" data-active="true">フラッシュカード</button>
+  <button class="tab" id="tabCheck">チェック表</button>
+</div>
+
+<!-- ================= フラッシュカード ================= -->
+<div id="flashApp" class="app fc-wrap" aria-label="フラッシュカード領域">
+  <header class="fc-header">
+    <h1>九九フラッシュカード</h1>
+    <div class="controls">
+      <div class="group" id="danGroup">
+        <span class="sub" style="margin:0 6px 0 2px">出題する段</span>
+        <div class="seg" id="danSeg"></div>
+        <button class="btn" id="selectAll">全部</button>
+        <button class="btn" id="selectClear">クリア</button>
+      </div>
+
+      <!-- 並び順：下がり九九 → シャッフル → ランダム20/30（20/30はONでシャッフル自動ON） -->
+      <div class="group">
+        <label><input type="checkbox" id="descB"> 下がり九九（9→1）</label>
+        <label><input type="checkbox" id="shuffleB"> シャッフル</label>
+        <label><input type="checkbox" id="rand20B"> ランダム20問</label>
+        <label><input type="checkbox" id="rand30B"> ランダム30問</label>
+        <!-- 追加：苦手特訓 -->
+        <label style="color:#e11d48; font-weight:bold;"><input type="checkbox" id="nigateB"> 苦手特訓モード🔥</label>
+      </div>
+
+      <button class="btn primary" id="startBtn">スタート / リセット</button>
+    </div>
+  </header>
+
+  <div class="board">
+    <section class="card" id="card" aria-live="polite">
+      <button id="hintBtn" title="ヒントをみる">？</button>
+      <div id="hintArea">
+        <div class="sub">ヒント</div>
+        <div class="hint-dots" id="hintDots"></div>
+        <button class="btn" style="margin-top:16px;" onclick="document.getElementById('hintArea').style.display='none'">閉じる</button>
+      </div>
+      <div class="inner">
+        <div class="face front">
+          <div>
+            <div class="sub">問題</div>
+            <h2 id="question"><span style="font-size: 0.7em; line-height: 1.3; display: inline-block;">出題をスタート<br>してください</span></h2>
+          </div>
+        </div>
+        <div class="face back">
+          <div>
+            <div class="sub">答え</div>
+            <h2 id="answer">—</h2>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="row"><strong>進捗</strong> <span id="count">0 / 0</span></div>
+      <div class="progress" aria-label="Progress"><div class="bar" id="bar"></div></div>
+      <div class="stat">
+        <div class="pill"><span>OK</span><strong id="okC">0</strong></div>
+        <div class="pill"><span>NG</span><strong id="ngC">0</strong></div>
+      </div>
+
+      <div class="row"><strong>タイマー</strong> <span id="timer">00:00.0</span></div>
+      <div id="pbDisplay" class="note" style="text-align:right; margin-top:-8px; font-size:12px;">自己ベスト: --:--.-</div>
+      
+      <div class="row">
+        <button class="btn" id="timerToggle" disabled>一時停止</button>
+        <span class="note">称号: <span id="rankTitle">未挑戦</span></span>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="revealBtn" disabled>答えを表示 <span class="kbd">Space</span></button>
+        <button class="btn" id="okBtn" disabled>OK <span class="kbd">←</span></button>
+        <button class="btn" id="ngBtn" disabled>NG <span class="kbd">→</span></button>
+      </div>
+      <div class="row">
+        <button class="btn" id="undoBtn" disabled>1つ戻す</button>
+        <button class="btn" id="redoBtn" disabled>やり直す（最初から）</button>
+      </div>
+      <p class="note">ラウンド終了ごとに <strong>NGだけ</strong>を自動で再出題します。すべてOKになるまで繰り返します。</p>
+      <p class="note">キーボード: <span class="kbd">Space</span> = 表示, <span class="kbd">←</span> = OK, <span class="kbd">→</span> = NG</p>
+      <p class="note">※下がり九九はシャッフルOFF時のみ順序が反映されます。</p>
+    </aside>
+  </div>
+
+  <div class="footer">© 九九フラッシュカード / ローカル動作・データはブラウザ内のみ</div>
+</div>
+
+<!-- ================= チェック表 ================= -->
+<div id="checkApp" class="checklist" aria-label="チェック表領域">
+  <h1>九九チェック表（2〜9の段）</h1>
+  <div class="wrap">
+    <div class="column" id="left"></div>
+    <div class="column" id="right"></div>
+  </div>
+  <div class="wide-block" id="wide"></div>
+  
+  <!-- 追加：苦手分析セクション -->
+  <div id="nigateAnalysis" class="panel" style="margin-top:32px; background:rgba(255,255,255,0.4);">
+    <h2>キミの苦手な九九ランキング TOP5</h2>
+    <div id="nigateList" style="padding:10px;">
+      挑戦すると、ここによく間違える問題が表示されるよ！
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================== 画面切替 ================== */
+const tabFlash = document.getElementById('tabFlash');
+const tabCheck = document.getElementById('tabCheck');
+const flashApp = document.getElementById('flashApp');
+const checkApp  = document.getElementById('checkApp');
+
+function setTab(which){
+  const isFlash = which === 'flash';
+  tabFlash.setAttribute('data-active', String(isFlash));
+  tabCheck.setAttribute('data-active', String(!isFlash));
+  flashApp.style.display = isFlash ? 'block' : 'none';
+  checkApp.style.display  = isFlash ? 'none'  : 'block';
+  if(!isFlash) window.refreshNigateAnalysis();
+}
+tabFlash.addEventListener('click', ()=>setTab('flash'));
+tabCheck.addEventListener('click', ()=>setTab('check'));
+
+/* ================== フラッシュカード（元コード改） ================== */
+(function(){
+  const $ = s => document.querySelector(s);
+  
+  // --- 効果音と紙吹雪 ---
+  const okSound = new Audio('https://upload.wikimedia.org/wikipedia/commons/b/b5/Radio_programe_jingle_2.ogg');
+  const ngSound = new Audio('https://upload.wikimedia.org/wikipedia/commons/1/15/Buzzer.ogg');
+  function playOk() { okSound.currentTime = 0; okSound.play().catch(e=>{}); }
+  function playNg() { ngSound.currentTime = 0; ngSound.play().catch(e=>{}); }
+  function fireConfetti() { if(typeof confetti === 'function') confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, zIndex: 10000 }); }
+
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const shuffle = arr => arr.sort(()=>Math.random()-0.5);
+  const sampleN = (arr, n) => {
+    if(n >= arr.length) return arr.slice();
+    const a = arr.slice();
+    for(let i=0; i<n; i++){
+      const j = i + Math.floor(Math.random()*(a.length-i));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a.slice(0,n);
+  };
+
+  // タイマー
+  let t0=0, elapsed=0, ticker=null, running=false;
+  function fmt(ms){ if(!ms || ms === Infinity) return "--:--.-"; const s=Math.floor(ms/1000), m=Math.floor(s/60), ss=s%60, ds=Math.floor((ms%1000)/100); return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}.${ds}`; }
+  function updateTimerUI(){ $('#timer').textContent=fmt(elapsed); $('#timerToggle').textContent=running?'一時停止':'再開'; }
+  function startTimer(){ if(running) return; running=true; t0=performance.now()-elapsed; ticker=setInterval(()=>{ elapsed=performance.now()-t0; updateTimerUI(); },100); $('#timerToggle').disabled=false; }
+  function stopTimer(){ if(!running) return; running=false; clearInterval(ticker); ticker=null; updateTimerUI(); }
+  function resetTimer(){ stopTimer(); elapsed=0; updateTimerUI(); }
+
+  // 自己ベスト・苦手データ管理
+  const PB_KEY = 'kuku_pbs_v1';
+  const NIGATE_KEY = 'kuku_nigate_v1';
+  let pbs = JSON.parse(localStorage.getItem(PB_KEY) || '{}');
+  let nigateStats = JSON.parse(localStorage.getItem(NIGATE_KEY) || '{}');
+
+  function savePB(category, time) {
+    if(!pbs[category] || time < pbs[category]) {
+      pbs[category] = time;
+      localStorage.setItem(PB_KEY, JSON.stringify(pbs));
+      return true;
+    }
+    return false;
+  }
+
+  function recordNigate(a, b) {
+    const key = `${a}x${b}`;
+    nigateStats[key] = (nigateStats[key] || 0) + 1;
+    localStorage.setItem(NIGATE_KEY, JSON.stringify(nigateStats));
+  }
+
+  window.refreshNigateAnalysis = function() {
+    const list = Object.entries(nigateStats)
+      .sort((a,b) => b[1] - a[1])
+      .slice(0, 5);
+    const container = $('#nigateList');
+    if(list.length === 0) {
+      container.innerHTML = "挑戦すると、ここによく間違える問題が表示されるよ！";
+      return;
+    }
+    container.innerHTML = list.map(([q, count], i) => `
+      <div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #ddd;">
+        <span>${i+1}位: <strong>${q.replace('x',' × ')}</strong></span>
+        <span>${count}回 ミス</span>
+      </div>
+    `).join('');
+  };
+
+  // 段ボタン生成
+  const danSeg = $('#danSeg');
+  for(let d=1; d<=9; d++){
+    const b=document.createElement('button');
+    b.textContent=`${d}の段`;
+    b.dataset.dan=String(d);
+    b.setAttribute('data-active','false');
+    b.addEventListener('click', ()=>{
+      const on=b.getAttribute('data-active')==='true';
+      b.setAttribute('data-active', String(!on));
+      updatePBDisplay();
+    });
+    danSeg.appendChild(b);
+  }
+  $('#selectAll').addEventListener('click', ()=> { $$('#danSeg button').forEach(b=>b.setAttribute('data-active','true')); updatePBDisplay(); });
+  $('#selectClear').addEventListener('click', ()=> { $$('#danSeg button').forEach(b=>b.setAttribute('data-active','false')); updatePBDisplay(); });
+
+  const rand20 = $('#rand20B'), rand30 = $('#rand30B'), shuffleB = $('#shuffleB'), nigateB = $('#nigateB');
+  const checkboxes = [rand20, rand30, shuffleB, nigateB, $('#descB')];
+  checkboxes.forEach(c => c.addEventListener('change', updatePBDisplay));
+
+  function getCategory() {
+    const activeDans = $$('#danSeg button').filter(b=>b.getAttribute('data-active')==='true').map(b=>b.dataset.dan);
+    if(rand30.checked) return 'rand30';
+    if(rand20.checked) return 'rand20';
+    if(nigateB.checked) return 'nigate_training';
+    if(activeDans.length === 1) {
+      const mode = shuffleB.checked ? 'shuffle' : ($('#descB').checked ? 'desc' : 'normal');
+      return `dan${activeDans[0]}_${mode}`;
+    }
+    return 'mixed';
+  }
+
+  function updatePBDisplay() {
+    const cat = getCategory();
+    $('#pbDisplay').textContent = `自己ベスト: ${fmt(pbs[cat])}`;
+  }
+
+  function getRank(cat, timeMs) {
+    let fast = 13000, mid = 17000;
+    if(cat === 'rand30') { fast = 35000; mid = 42000; }
+    else if(cat.includes('rand20') || cat === 'nigate_training') { fast = 25000; mid = 30000; }
+    
+    if(timeMs <= fast) return '九九の達人 (S)';
+    if(timeMs <= mid) return '九九の名人 (A)';
+    return '九九の修行中 (B)';
+  }
+
+  // ヒント表示
+  $('#hintBtn').addEventListener('click', () => {
+    const qText = els.q.textContent;
+    const match = qText.match(/(\d+) × (\d+)/);
+    if(!match) return;
+    const a = parseInt(match[1]), b = parseInt(match[2]);
+    const container = $('#hintDots');
+    container.innerHTML = '';
+    for(let i=0; i<b; i++) {
+      const group = document.createElement('div');
+      group.className = 'hint-group';
+      for(let j=0; j<a; j++) {
+        const d = document.createElement('div');
+        d.className = 'dot';
+        group.appendChild(d);
+      }
+      container.appendChild(group);
+    }
+    $('#hintArea').style.display = 'flex';
+  });
+
+  // 状態
+  let deck=[], nextDeck=[], idx=-1, flipped=false, started=false;
+  let stats={ok:0, ng:0, seen:0, total:0, round:1};
+  const els={ card:$('#card'), q:$('#question'), a:$('#answer'),
+    ok:$('#okBtn'), ng:$('#ngBtn'), reveal:$('#revealBtn'),
+    redo:$('#redoBtn'), undo:$('#undoBtn'),
+    count:$('#count'), okC:$('#okC'), ngC:$('#ngC'), bar:$('#bar') };
+
+  function buildPool(){
+    if(nigateB.checked) {
+      const list = Object.entries(nigateStats).sort((a,b) => b[1] - a[1]).slice(0, 10);
+      let pool = [];
+      list.forEach(([q]) => {
+        const [a, b] = q.split('x').map(Number);
+        pool.push({a, b});
+      });
+      if(pool.length === 0) { toast("まだ苦手な問題がありません"); return []; }
+      return shuffle(pool);
+    }
+    const activeDans = $$('#danSeg button').filter(b=>b.getAttribute('data-active')==='true').map(b=>+b.dataset.dan);
+    const descending = $('#descB').checked;
+    let pool=[];
+    for(const a of activeDans){
+      const bs = descending ? [9,8,7,6,5,4,3,2,1] : [1,2,3,4,5,6,7,8,9];
+      for(const b of bs){ pool.push({a,b}); }
+    }
+    if(shuffleB.checked) pool = shuffle(pool);
+    if(rand20.checked){ pool = sampleN(pool, Math.min(20, pool.length)); }
+    else if(rand30.checked){ pool = sampleN(pool, Math.min(30, pool.length)); }
+    return pool;
+  }
+
+  function toast(msg){
+    let t=document.getElementById('fc-toast');
+    if(t) t.remove();
+    t=document.createElement('div'); t.id='fc-toast'; t.textContent=msg;
+    document.body.appendChild(t); setTimeout(()=>t&&t.remove(),2400);
+  }
+
+  function updateUI(isDone=false){
+    $('#count').textContent = `${Math.min(stats.seen+1, stats.total)} / ${stats.total}`;
+    $('#okC').textContent = stats.ok; $('#ngC').textContent = stats.ng;
+    const ratio = stats.total ? Math.min(100, Math.round((stats.seen/stats.total)*100)) : 0;
+    $('#bar').style.width = (isDone?100:ratio) + '%';
+  }
+
+  let history=[];
+  function step(){
+    els.card.setAttribute('data-flipped','false'); flipped=false; idx++;
+    $('#hintArea').style.display = 'none';
+    if(idx>=deck.length){
+      if(nextDeck.length===0){
+        const cat = getCategory();
+        const rank = getRank(cat, elapsed);
+        els.q.textContent=`すべてOK！（${stats.ok}問 正解）`;
+        els.a.innerHTML=`<div style="font-size:0.6em; margin-bottom:10px;">称号: ${rank}</div><span style="font-size:0.8em; white-space:nowrap;">おつかれさま！</span>`;
+        els.card.setAttribute('data-flipped','true'); stopTimer();
+        els.reveal.disabled = els.ok.disabled = els.ng.disabled = els.undo.disabled = true;
+        
+        const isNewRecord = savePB(cat, elapsed);
+        updatePBDisplay();
+        toast(`クリア！ ${isNewRecord ? '🔥新記録！' : ''} ${fmt(elapsed)}`); fireConfetti(); 
+        
+        if(stats.ng === 0 && typeof window.triggerKukuAutoCheck === 'function') {
+          const activeDans = $$('#danSeg button').filter(b=>b.getAttribute('data-active')==='true').map(b=>+b.dataset.dan);
+          window.triggerKukuAutoCheck({ dans: activeDans, isShuffle: shuffleB.checked, isDesc: $('#descB').checked, isRand20: rand20.checked, isRand30: rand30.checked, timeMs: elapsed });
+        }
+        return;
+      }
+      deck = shuffleB.checked ? shuffle(nextDeck) : nextDeck.slice();
+      nextDeck=[]; idx=0; stats.round++; toast(`NGだけを再出題します（${deck.length}枚）`);
+    }
+    const c = deck[idx];
+    els.q.textContent = `${c.a} × ${c.b} = ?`; els.a.textContent = c.a * c.b;
+    els.reveal.disabled=false; els.ok.disabled=true; els.ng.disabled=true; els.undo.disabled=history.length===0;
+    $('#hintBtn').style.display = 'block'; updateUI();
+  }
+
+  function start(){
+    deck = buildPool();
+    if(deck.length===0){ return; }
+    nextDeck=[]; idx=-1; flipped=false; started=true; history=[];
+    stats={ok:0,ng:0,seen:0,total:deck.length,round:1};
+    $('#redoBtn').disabled=false; resetTimer(); startTimer(); step();
+  }
+
+  $('#startBtn').addEventListener('click', start);
+  $('#revealBtn').addEventListener('click', ()=>{ if(!started) return; els.card.setAttribute('data-flipped','true'); flipped=true; els.ok.disabled=false; els.ng.disabled=false; });
+  $('#okBtn').addEventListener('click', ()=>decide(true));
+  $('#ngBtn').addEventListener('click', ()=>decide(false));
+  function decide(isOk){
+    if(!started || !flipped) return;
+    const card=deck[idx]; history.push({card,isOk}); stats.seen++;
+    if(isOk){ stats.ok++; playOk(); } else { stats.ng++; nextDeck.push(card); recordNigate(card.a, card.b); playNg(); }
+    updateUI(); step();
+  }
+  $('#undoBtn').addEventListener('click', ()=>{
+    if(history.length===0) return;
+    const last=history.pop(); stats.seen--;
+    if(last.isOk){ stats.ok--; } else { stats.ng--; const i=nextDeck.findIndex(x=>x.a===last.card.a && x.b===last.card.b); if(i>-1) nextDeck.splice(i,1); }
+    idx=Math.max(-1,idx-1); step();
+  });
+  $('#redoBtn').addEventListener('click', start);
+
+  window.addEventListener('keydown', (e)=>{
+    if(e.target.closest('input,textarea')) return;
+    if(e.code==='Space'){ e.preventDefault(); if(!els.reveal.disabled) $('#revealBtn').click(); return; }
+    if(e.code==='ArrowLeft'){ if(!els.ok.disabled) $('#okBtn').click(); }
+    if(e.code==='ArrowRight'){ if(!els.ng.disabled) $('#ngBtn').click(); }
+  });
+  
+  updatePBDisplay();
+})();
+
+/* ================== チェック表（/26.html を組み込み・スコープ化） ================== */
+(function(){
+  function getSources(el){return new Set((el?.dataset.sources||"").split(",").filter(Boolean))}
+  function setSources(el,set){if(el) el.dataset.sources=[...set].join(",")}
+  function ensureChecked(el){el?.classList.add('checked')}
+  function ensureUnchecked(el){el?.classList.remove('checked')}
+  function setAppear(el, on){ if(!el) return; el.classList.add('anim'); if(on){ el.classList.add('show'); } else { el.classList.remove('show'); } }
+  function addSourceAndCheck(el,source,row){
+    if(!el) return;
+    const src=getSources(el); src.add(source); setSources(el,src); ensureChecked(el);
+    if(row && el.dataset.kind===row.dataset.mid){
+      const t=row.querySelector('[data-kind="tadashiku"]');
+      const tSrc=getSources(t); tSrc.add('MID'); setSources(t,tSrc); ensureChecked(t);
+    }
+  }
+  function removeSourceAndMaybeUncheck(el,source,row){
+    if(!el) return;
+    const src=getSources(el); if(src.has(source)){ src.delete(source); setSources(el,src); }
+    if(src.size===0 && el.dataset.manual!=="true"){
+      ensureUnchecked(el);
+      if(row && el.dataset.kind===row.dataset.mid){
+        const t=row.querySelector('[data-kind="tadashiku"]');
+        removeSourceAndMaybeUncheck(t,'MID',row);
+      }
+    }
+  }
+
+  const STORAGE_KEY='kukuChecklist.v2.secondsChange.integrated';
+
+  function makeKey(parts){ return parts.join('|'); }
+  function saveState(){
+    const data = {};
+    document.querySelectorAll('#checkApp .cell-box').forEach(el=>{
+      const key = el.dataset.key || el.id || null;
+      if(!key) return;
+      data[key] = { checked: el.classList.contains('checked'), manual:  el.dataset.manual === 'true', sources: el.dataset.sources || "" };
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+  function loadState(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return;
+    let data={}; try{ data = JSON.parse(raw) || {}; }catch(e){ return; }
+    document.querySelectorAll('#checkApp .cell-box').forEach(el=>{
+      const key = el.dataset.key || el.id || null;
+      if(!key || !data[key]) return;
+      const s = data[key];
+      if(s.checked){ el.classList.add('checked'); } else { el.classList.remove('checked'); }
+      el.dataset.manual = s.manual ? 'true' : '';
+      el.dataset.sources = s.sources || '';
+    });
+    updateResultsView();
+  }
+
+  const left = document.getElementById("left");
+  const right = document.getElementById("right");
+  const types = ["じゅんばん","ぎゃくから","ばらばら"];
+
+  function createDanTable(dan){
+    const section=document.createElement("div");
+    const h=document.createElement("h2"); h.textContent=`${dan}の段`;
+    const table=document.createElement("table");
+    table.innerHTML = `<tr><th>種類</th><th>正しく</th><th>17秒</th><th>13秒</th><th class="result">結果</th></tr>`;
+    types.forEach((t,i)=>{
+      const tr=document.createElement("tr");
+      tr.dataset.mid="17"; tr.dataset.fast="13";
+      tr.innerHTML = `
+        <td class="row-title">${t}</td>
+        <td><span class="cell-box" data-kind="tadashiku" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="17" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="13" data-sources="" ${t==="ばらばら"?`id="bfast-${dan}"`:""}></span></td>
+        ${i===0?`<td rowspan="3" class="result"><img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_gn0ozwgn0ozwgn0o.png?raw=true" class="hanamaru anim" id="hana-${dan}" alt="はなまる"></td>`:""}
+      `;
+      table.appendChild(tr);
+      tr.querySelectorAll('.cell-box').forEach((c,idx)=>{
+        c.dataset.key = makeKey(['dan', dan, t, c.dataset.kind || 'none', idx]);
+      });
+    });
+    section.appendChild(h); section.appendChild(table);
+    return section;
+  }
+
+  function deluxeLeft(){return `<img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_b6gkzxb6gkzxb6gk.png?raw=true" alt="2-5まとめ">`}
+  function deluxeRight(){return `<img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_mw7b8amw7b8amw7b.png?raw=true" alt="6-9まとめ">`}
+  function passLeft(){return `<img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_krr9wykrr9wykrr9.png?raw=true" alt="2-5合格">`}
+  function passRight(){return `<img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_53g99a53g99a53g9.png?raw=true" alt="6-9合格">`}
+  function royalCertificateSVG(){return `<img src="https://github.com/byakusen/gougelgeo.kukuflash_irasuto/blob/main/Gemini_Generated_Image_n0mbvwn0mbvwn0mb.png?raw=true" alt="合格証">`}
+
+  function createRangeBlock(title, rows, blockId, svgMaker){
+    const section=document.createElement("div");
+    const h=document.createElement("h2"); h.textContent=title;
+    const table=document.createElement("table");
+    table.innerHTML = `<tr><th style="width:28%">範囲</th><th>正しく</th><th>30秒</th><th>25秒</th><th class="result">結果</th></tr>`;
+    rows.forEach((r,i)=>{
+      const tr=document.createElement("tr");
+      tr.className="summary-row"; tr.dataset.mid="30"; tr.dataset.fast="25";
+      tr.innerHTML = `
+        <td class="row-title">${r}</td>
+        <td><span class="cell-box" data-kind="tadashiku" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="30" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="25" data-sources="" id="${blockId}-fast-${i+1}"></span></td>
+        ${i===0?`<td rowspan="3" class="result"><div class="hanamaru-deluxe anim" id="${blockId}-deluxe">${svgMaker()}</div></td>`:""}
+      `;
+      table.appendChild(tr);
+      tr.querySelectorAll('.cell-box').forEach((c,idx)=>{
+        c.dataset.key = makeKey(['summary', blockId, r, c.dataset.kind, idx]);
+      });
+    });
+    section.appendChild(h); section.appendChild(table); section.id=blockId;
+    return section;
+  }
+
+  function createTeacherBlock(title, blockId, passSvgMaker){
+    const section=document.createElement("div");
+    section.id = blockId;
+    const h=document.createElement("h2"); h.textContent=title;
+    const table=document.createElement("table");
+    table.innerHTML = `
+      <tr><th style="width:18%">${title.replace(/（.*$/,"")}</th><th>正しく</th><th>30秒</th><th>25秒</th><th class="result">結果</th></tr>
+      <tr class="teacher-row" data-mid="30" data-fast="25">
+        <td class="row-title">ランダム20問</td>
+        <td><span class="cell-box" data-kind="tadashiku" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="30" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="25" data-sources=""></span></td>
+        <td rowspan="2" class="result"><div class="gokaku anim" id="${blockId}-pass">${passSvgMaker()}</div></td>
+      </tr>
+      <tr class="teacher-check-row">
+        <td class="row-title">先生チェック</td>
+        <td colspan="3"><span class="cell-box" data-teacher="true" id="${blockId}-teacher"></span></td>
+      </tr>
+    `;
+    section.appendChild(h); section.appendChild(table);
+    const row=table.querySelector('.teacher-row');
+    row.querySelectorAll('.cell-box').forEach((c,idx)=>{ c.dataset.key = makeKey(['teacher', blockId, 'upper', c.dataset.kind, idx]); });
+    table.querySelector('[data-teacher="true"]').dataset.key = makeKey(['teacher', blockId, 'check', 'teacher', 0]);
+    return section;
+  }
+
+  function createWideAllBlock(){
+    const section=document.createElement("div");
+    section.className="wide-table";
+    section.id = "wide-all-block";
+    const h=document.createElement("h2"); h.textContent="2〜9の段";
+    const table=document.createElement("table");
+    table.innerHTML = `
+      <tr class="wide-head">
+        <th class="wide-col-title">2〜9の段</th>
+        <th class="wide-col-small">正しく</th>
+        <th class="wide-col-small">42秒</th>
+        <th class="wide-col-small">35秒</th>
+        <th class="result">結果</th>
+      </tr>
+      <tr class="teacher-row" data-mid="42" data-fast="35">
+        <td class="row-title">ランダム30問</td>
+        <td><span class="cell-box" data-kind="tadashiku" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="42" data-sources=""></span></td>
+        <td><span class="cell-box" data-kind="35" data-sources=""></span></td>
+        <td rowspan="2" class="result"><div class="mini-award anim" id="wide-award">${royalCertificateSVG()}</div></td>
+      </tr>
+      <tr class="teacher-check-row">
+        <td class="row-title">先生チェック</td>
+        <td colspan="3"><span class="cell-box" data-teacher="true" id="wide-teacher"></span></td>
+      </tr>
+    `;
+    section.appendChild(h); section.appendChild(table);
+    const row=table.querySelector('.teacher-row');
+    row.querySelectorAll('.cell-box').forEach((c,idx)=>{ c.dataset.key = makeKey(['wide', 'all', 'upper', c.dataset.kind, idx]); });
+    table.querySelector('#wide-teacher').dataset.key = makeKey(['wide', 'all', 'check', 'teacher', 0]);
+    return section;
+  }
+
+  for(let dan=2; dan<=5; dan++){ left.appendChild(createDanTable(dan)); }
+  left.appendChild(createRangeBlock("2〜5の段（まとめ）", ["2〜3の段","3〜4の段","4〜5の段"], "range-left", deluxeLeft));
+  left.appendChild(createTeacherBlock("2〜5の段", "teacher-left", passLeft));
+  for(let dan=6; dan<=9; dan++){ right.appendChild(createDanTable(dan)); }
+  right.appendChild(createRangeBlock("6〜9の段（まとめ）", ["6〜7の段","7〜8の段","8〜9の段"], "range-right", deluxeRight));
+  right.appendChild(createTeacherBlock("6〜9の段", "teacher-right", passRight));
+  document.getElementById('wide').appendChild(createWideAllBlock());
+
+  function updateResultsView(){
+    for(let dan=2; dan<=9; dan++){
+      const hana=document.getElementById(`hana-${dan}`);
+      const bfast=document.getElementById(`bfast-${dan}`);
+      if(hana && bfast){ setAppear(hana, bfast.classList.contains("checked")); }
+    }
+    const lF1 = document.getElementById('range-left-fast-1'), lF2 = document.getElementById('range-left-fast-2'), lF3 = document.getElementById('range-left-fast-3');
+    const lDeluxe = document.getElementById('range-left-deluxe');
+    if(lDeluxe && lF1 && lF2 && lF3) setAppear(lDeluxe, lF1.classList.contains('checked') && lF2.classList.contains('checked') && lF3.classList.contains('checked'));
+    const rF1 = document.getElementById('range-right-fast-1'), rF2 = document.getElementById('range-right-fast-2'), rF3 = document.getElementById('range-right-fast-3');
+    const rDeluxe = document.getElementById('range-right-deluxe');
+    if(rDeluxe && rF1 && rF2 && rF3) setAppear(rDeluxe, rF1.classList.contains('checked') && rF2.classList.contains('checked') && rF3.classList.contains('checked'));
+    ['teacher-left','teacher-right'].forEach(id=>{
+      const tch=document.getElementById(`${id}-teacher`);
+      const pass=document.getElementById(`${id}-pass`);
+      const fastBox = document.querySelector(`#${id} [data-kind="25"]`);
+      if(tch && pass && fastBox){ setAppear(pass, tch.classList.contains('checked') && fastBox.classList.contains('checked')); }
+    });
+    const wideT=document.getElementById('wide-teacher');
+    const award=document.getElementById('wide-award');
+    const fast35Box = document.querySelector('#wide-all-block [data-kind="35"]');
+    if(wideT && award && fast35Box){ setAppear(award, wideT.classList.contains('checked') && fast35Box.classList.contains('checked')); }
+  }
+
+  function handleClick(box){
+    if (box.dataset.teacher === "true") {
+      const id = box.id;
+      let isLocked = true;
+      if (id === 'teacher-left-teacher') {
+        const summaryDeluxe = document.getElementById('range-left-deluxe');
+        if (summaryDeluxe && summaryDeluxe.classList.contains('show')) isLocked = false;
+      } else if (id === 'teacher-right-teacher') {
+        const summaryDeluxe = document.getElementById('range-right-deluxe');
+        if (summaryDeluxe && summaryDeluxe.classList.contains('show')) isLocked = false;
+      } else if (id === 'wide-teacher') {
+        const passLeft = document.getElementById('teacher-left-pass');
+        const passRight = document.getElementById('teacher-right-pass');
+        if (passLeft?.classList.contains('show') && passRight?.classList.contains('show')) isLocked = false;
+      } else { isLocked = false; }
+      if (isLocked) return;
+      box.classList.toggle("checked");
+      updateResultsView(); saveState(); return;
+    }
+    const row  = box.closest('tr');
+    const kind = box.dataset.kind;
+    const mid  = row ? row.dataset.mid  : undefined;
+    const fast = row ? row.dataset.fast : undefined;
+    if(!mid && !fast){ box.classList.toggle("checked"); updateResultsView(); saveState(); return; }
+    const isOn = box.classList.contains('checked');
+    if(isOn){
+      box.dataset.manual = ""; setSources(box,new Set()); ensureUnchecked(box);
+      if(kind===fast){ removeSourceAndMaybeUncheck(row.querySelector(`[data-kind="${mid}"]`),'FAST',row); removeSourceAndMaybeUncheck(row.querySelector('[data-kind="tadashiku"]'),'FAST',row); }
+      if(kind===mid){ removeSourceAndMaybeUncheck(row.querySelector('[data-kind="tadashiku"]'),'MID',row); }
+    }else{
+      box.dataset.manual = "true"; ensureChecked(box);
+      if(kind===fast){ addSourceAndCheck(row.querySelector(`[data-kind="${mid}"]`),'FAST',row); const tCell=row.querySelector('[data-kind="tadashiku"]'); if(tCell){ const tSrc=getSources(tCell); tSrc.add('FAST'); setSources(tCell,tSrc); ensureChecked(tCell); } }
+      if(kind===mid){ const tCell=row.querySelector('[data-kind="tadashiku"]'); if(tCell) addSourceAndCheck(tCell,'MID',row); }
+    }
+    updateResultsView(); saveState();
+  }
+
+  window.triggerKukuAutoCheck = function(session) {
+    const { dans, isShuffle, isDesc, isRand20, isRand30, timeMs } = session;
+    let targetRow = null;
+    let midVal = "17", fastVal = "13";
+    if (isRand30) { targetRow = document.querySelector('#wide-all-block .teacher-row'); midVal = "42"; fastVal = "35"; }
+    else if (isRand20) { if (dans.every(d => d <= 5)) { targetRow = document.querySelector('#teacher-left .teacher-row'); } else if (dans.every(d => d >= 6)) { targetRow = document.querySelector('#teacher-right .teacher-row'); } midVal = "30"; fastVal = "25"; }
+    else if (dans.length === 1) {
+      const d = dans[0];
+      const typeIdx = isShuffle ? 2 : (isDesc ? 1 : 0);
+      const h2s = Array.from(document.querySelectorAll('#left h2, #right h2'));
+      const danHeader = h2s.find(h => h.textContent === `${d}の段`);
+      if (danHeader) { targetRow = danHeader.nextElementSibling.querySelectorAll('tr')[typeIdx + 1]; }
+    }
+    if (!targetRow) return;
+    const fastMs = parseInt(fastVal) * 1000;
+    const midMs = parseInt(midVal) * 1000;
+    let boxToClick = null;
+    if (timeMs <= fastMs) { boxToClick = targetRow.querySelector(`[data-kind="${fastVal}"]`); }
+    else if (timeMs <= midMs) { boxToClick = targetRow.querySelector(`[data-kind="${midVal}"]`); }
+    else { boxToClick = targetRow.querySelector('[data-kind="tadashiku"]'); }
+    if (boxToClick && !boxToClick.classList.contains('checked')) { handleClick(boxToClick); }
+  };
+
+  document.addEventListener('click', e=>{
+    const cApp = document.getElementById('checkApp');
+    if(!cApp || !cApp.contains(e.target)) return;
+    const box=e.target.closest('.cell-box');
+    if(box) { if (box.dataset.teacher !== "true") return; handleClick(box); }
+  });
+
+  function runInit() { loadState(); updateResultsView(); }
+  if (document.readyState === 'loading') { window.addEventListener('DOMContentLoaded', runInit); } else { runInit(); }
+})();
+</script>
+</body>
+</html>
